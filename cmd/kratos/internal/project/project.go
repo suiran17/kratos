@@ -47,12 +47,14 @@ func run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		panic(err)
 	}
+
 	t, err := time.ParseDuration(timeout)
 	if err != nil {
 		panic(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), t)
 	defer cancel()
+
 	name := ""
 	if len(args) == 0 {
 		prompt := &survey.Input{
@@ -66,14 +68,18 @@ func run(cmd *cobra.Command, args []string) {
 	} else {
 		name = args[0]
 	}
+
 	wd = getProjectPlaceDir(name, wd)
 	p := &Project{Name: filepath.Base(name), Path: name}
 	done := make(chan error, 1)
+
 	go func() {
+		// 非 mod 模式
 		if !nomod {
 			done <- p.New(ctx, wd, repoURL, branch)
 			return
 		}
+
 		if _, e := os.Stat(path.Join(wd, "go.mod")); os.IsNotExist(e) {
 			done <- fmt.Errorf("🚫 go.mod don't exists in %s", wd)
 			return
@@ -83,9 +89,13 @@ func run(cmd *cobra.Command, args []string) {
 		if e != nil {
 			panic(e)
 		}
+
+		// done 的缓存区长度为1, 所以这里不会阻塞
 		done <- p.Add(ctx, wd, repoURL, branch, mod)
 	}()
+
 	select {
+	// 超时控制
 	case <-ctx.Done():
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			fmt.Fprint(os.Stderr, "\033[31mERROR: project creation timed out\033[m\n")
@@ -99,6 +109,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 }
 
+// 获取项目地点目录
 func getProjectPlaceDir(projectName string, fallbackPlaceDir string) string {
 	projectFullPath := projectName
 
